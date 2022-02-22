@@ -43,8 +43,12 @@ def train_eeg(args):
     reports = []
 
     csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
-    lda = LinearDiscriminantAnalysis()
-    clf = Pipeline([('CSP', csp), ('LDA', lda)])
+    svc = SVC(kernel='linear', probability=True, class_weight='balanced')
+    clf = Pipeline([('CSP', csp), ('SVC', svc)])
+
+    train_data_total = None
+    train_label_total = None
+    test_data_total = None
 
     for i in range(10):
         print(f'Processing {i}')
@@ -57,17 +61,35 @@ def train_eeg(args):
         train_data = signal.filtfilt(b, a, train_data)
         test_data = signal.filtfilt(b, a, test_data)
 
-        clf.fit(train_data, train_label)
+        if train_data_total is None:
+            train_data_total = train_data
+            train_label_total = train_label
+            test_data_total = test_data
+        else:
+            train_data_total = np.concatenate((train_data_total, train_data), axis=0)
+            train_label_total = np.concatenate((train_label_total, train_label), axis=0)
+            test_data_total = np.concatenate((test_data_total, test_data), axis=0)
 
-        predict_label.extend(clf.predict(test_data))
+    clf.fit(train_data_total, train_label_total)
 
-        reports.append(
-            classification_report(train_label, clf.predict(train_data), target_names=['0',
-                                                                                      '1']))
+    predict_label.extend(clf.predict(test_data_total))
+
+    # reports.append(
+    #     classification_report(train_data_total,
+    #                           clf.predict(train_label_total),
+    #                           target_names=['0', '1']))
 
     csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
-    lda = LinearDiscriminantAnalysis()
-    clf = Pipeline([('CSP', csp), ('LDA', lda)])
+    svc = SVC(kernel='linear', probability=True, class_weight='balanced')
+    clf = Pipeline([('CSP', csp), ('SVC', svc)])
+
+    train_data_total = np.array([])
+    train_label_total = np.array([])
+    test_data_total = np.zeros([])
+
+    train_data_total = None
+    train_label_total = None
+    test_data_total = None
 
     for i in range(10, 20):
         print(f'Processing {i}')
@@ -80,19 +102,33 @@ def train_eeg(args):
         train_data = signal.filtfilt(b, a, train_data)
         test_data = signal.filtfilt(b, a, test_data)
 
-        clf.fit(train_data, train_label)
+        if train_data_total is None:
+            train_data_total = train_data
+            train_label_total = train_label
+            test_data_total = test_data
+        else:
+            train_data_total = np.concatenate((train_data_total, train_data), axis=0)
+            train_label_total = np.concatenate((train_label_total, train_label), axis=0)
+            test_data_total = np.concatenate((test_data_total, test_data), axis=0)
 
-        predict_label.extend(clf.predict(test_data))
+    clf.fit(train_data_total, train_label_total)
 
-        reports.append(
-            classification_report(train_label, clf.predict(train_data), target_names=['0',
-                                                                                      '1']))
+    predict_label.extend(clf.predict(test_data_total))
+
+    print(train_data_total.shape, train_label_total.shape, test_data_total.shape)
+
+    # reports.append(
+    #     classification_report(train_data_total,
+    #                           clf.predict(train_label_total),
+    #                           target_names=['0', '1']))
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
                      index=False,
                      sep=',')
-    print(reports)
+
+    for i in reports:
+        print(i)
 
 
 if __name__ == '__main__':
