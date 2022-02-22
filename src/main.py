@@ -22,6 +22,9 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
 
+import warnings
+warnings.filterwarnings("ignore")
+
 opt = argparse.ArgumentParser()
 opt.add_argument('--data_path', type=str, default='data/', help='data path')
 opt.add_argument('--result_path', type=str, default='result/', help='result path')
@@ -39,6 +42,7 @@ def train_eeg(args):
     reports = []
 
     for i in range(20):
+        print(f'Processing {i}')
         train_data = np.load(os.path.join(args.data_path, 'train_data_' + file_id[i] + '.npy'))
         train_label = np.load(os.path.join(args.data_path,
                                            'train_label_' + file_id[i] + '.npy'))
@@ -52,33 +56,25 @@ def train_eeg(args):
         rdf = RandomForestClassifier(n_estimators=100,
                                      max_depth=None,
                                      min_samples_split=2,
-                                     min_samples_leaf=1,
-                                     max_features='auto',
-                                     bootstrap=True,
-                                     oob_score=False,
-                                     n_jobs=1,
-                                     random_state=None,
-                                     verbose=0)
-        # svm = SVC(C=1, kernel='rbf', gamma='auto', probability=True)
-        clf = GridSearchCV(Pipeline([('CSP', csp), ('RDF', rdf)]), {
-            'CSP__n_components': [20, 40, 60, 80, 100],
-            'RDF__n_estimators': [100, 200, 300, 400, 500],
-            'RDF__max_depth': [None, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
-            'RDF__min_samples_split': [2, 3, 4, 5, 6, 7, 8, 9, 10],
-            'RDF__min_samples_leaf': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            'RDF__max_features': ['auto', 'sqrt', 'log2']
-        },
-                           cv=5,
-                           n_jobs=1,
-                           verbose=0)
+                                     random_state=0)
+        pipe = Pipeline([('CSP', csp), ('RDF', rdf)])
+        param_grid = {
+            'CSP__n_components': [20],
+            'RDF__n_estimators': [100],
+            'RDF__max_depth': [10],
+            'RDF__min_samples_split': [10]
+        }
+        grid = GridSearchCV(pipe, param_grid, cv=5, n_jobs=1, verbose=1)
+        grid.fit(train_data, train_label)
+        print('Best score: {}'.format(grid.best_score_))
+        print('Best parameters: {}'.format(grid.best_params_))
 
-        clf.fit(train_data, train_label)
-
-        predict_label.extend(clf.predict(test_data))
+        predict_label.extend(grid.predict(test_data))
 
         reports.append(
-            classification_report(train_label, clf.predict(train_data), target_names=['0',
-                                                                                      '1']))
+            classification_report(train_label,
+                                  grid.predict(train_data),
+                                  target_names=['0', '1']))
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
