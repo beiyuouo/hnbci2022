@@ -21,6 +21,7 @@ from sklearn.svm import SVC, SVR
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -41,7 +42,11 @@ def train_eeg(args):
 
     reports = []
 
-    for i in range(20):
+    csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
+    lda = LinearDiscriminantAnalysis()
+    clf = Pipeline([('CSP', csp), ('LDA', lda)])
+
+    for i in range(10):
         print(f'Processing {i}')
         train_data = np.load(os.path.join(args.data_path, 'train_data_' + file_id[i] + '.npy'))
         train_label = np.load(os.path.join(args.data_path,
@@ -52,29 +57,36 @@ def train_eeg(args):
         train_data = signal.filtfilt(b, a, train_data)
         test_data = signal.filtfilt(b, a, test_data)
 
-        csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
-        rdf = RandomForestClassifier(n_estimators=100,
-                                     max_depth=None,
-                                     min_samples_split=2,
-                                     random_state=0)
-        pipe = Pipeline([('CSP', csp), ('RDF', rdf)])
-        param_grid = {
-            'CSP__n_components': [20],
-            'RDF__n_estimators': [100],
-            'RDF__max_depth': [10],
-            'RDF__min_samples_split': [10]
-        }
-        grid = GridSearchCV(pipe, param_grid, cv=5, n_jobs=1, verbose=1)
-        grid.fit(train_data, train_label)
-        print('Best score: {}'.format(grid.best_score_))
-        print('Best parameters: {}'.format(grid.best_params_))
+        clf.fit(train_data, train_label)
 
-        predict_label.extend(grid.predict(test_data))
+        predict_label.extend(clf.predict(test_data))
 
         reports.append(
-            classification_report(train_label,
-                                  grid.predict(train_data),
-                                  target_names=['0', '1']))
+            classification_report(train_label, clf.predict(train_data), target_names=['0',
+                                                                                      '1']))
+
+    csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
+    lda = LinearDiscriminantAnalysis()
+    clf = Pipeline([('CSP', csp), ('LDA', lda)])
+
+    for i in range(10, 20):
+        print(f'Processing {i}')
+        train_data = np.load(os.path.join(args.data_path, 'train_data_' + file_id[i] + '.npy'))
+        train_label = np.load(os.path.join(args.data_path,
+                                           'train_label_' + file_id[i] + '.npy'))
+        test_data = np.load(os.path.join(args.data_path, 'test_data_' + file_id[i] + '.npy'))
+
+        b, a = signal.butter(8, [8 / 125, 30 / 125], 'bandpass')
+        train_data = signal.filtfilt(b, a, train_data)
+        test_data = signal.filtfilt(b, a, test_data)
+
+        clf.fit(train_data, train_label)
+
+        predict_label.extend(clf.predict(test_data))
+
+        reports.append(
+            classification_report(train_label, clf.predict(train_data), target_names=['0',
+                                                                                      '1']))
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
