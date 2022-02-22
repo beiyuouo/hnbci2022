@@ -21,7 +21,6 @@ from sklearn.svm import SVC, SVR
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -42,85 +41,36 @@ def train_eeg(args):
 
     reports = []
 
-    csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
-    svc = SVC(kernel='linear', probability=True, class_weight='balanced')
-    clf = Pipeline([('CSP', csp), ('SVC', svc)])
-
-    train_data_total = None
-    train_label_total = None
-    test_data_total = None
-
-    for i in range(10):
+    for i in range(20):
         print(f'Processing {i}')
         train_data = np.load(os.path.join(args.data_path, 'train_data_' + file_id[i] + '.npy'))
         train_label = np.load(os.path.join(args.data_path,
                                            'train_label_' + file_id[i] + '.npy'))
         test_data = np.load(os.path.join(args.data_path, 'test_data_' + file_id[i] + '.npy'))
 
-        b, a = signal.butter(8, [8 / 125, 30 / 125], 'bandpass')
+        b, a = signal.butter(8, [0.5 * 2 / 250, 80 * 2 / 250], 'bandpass')
         train_data = signal.filtfilt(b, a, train_data)
         test_data = signal.filtfilt(b, a, test_data)
 
-        if train_data_total is None:
-            train_data_total = train_data
-            train_label_total = train_label
-            test_data_total = test_data
-        else:
-            train_data_total = np.concatenate((train_data_total, train_data), axis=0)
-            train_label_total = np.concatenate((train_label_total, train_label), axis=0)
-            test_data_total = np.concatenate((test_data_total, test_data), axis=0)
+        csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
+        svc = SVC(kernel='linear', probability=True, class_weight='balanced', C=1)
+        pipe = Pipeline([('CSP', csp), ('SVC', svc)])
+        param_grid = {
+            'CSP__n_components': [20],
+            'SVC__C': [1],
+            'SVC__kernel': ['linear', 'rbf'],
+        }
+        grid = GridSearchCV(pipe, param_grid, cv=5, n_jobs=1, verbose=1)
+        grid.fit(train_data, train_label)
+        print('Best score: {}'.format(grid.best_score_))
+        print('Best parameters: {}'.format(grid.best_params_))
 
-    clf.fit(train_data_total, train_label_total)
+        predict_label.extend(grid.predict(test_data))
 
-    predict_label.extend(clf.predict(test_data_total))
-
-    # reports.append(
-    #     classification_report(train_data_total,
-    #                           clf.predict(train_label_total),
-    #                           target_names=['0', '1']))
-
-    csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
-    svc = SVC(kernel='linear', probability=True, class_weight='balanced')
-    clf = Pipeline([('CSP', csp), ('SVC', svc)])
-
-    train_data_total = np.array([])
-    train_label_total = np.array([])
-    test_data_total = np.zeros([])
-
-    train_data_total = None
-    train_label_total = None
-    test_data_total = None
-
-    for i in range(10, 20):
-        print(f'Processing {i}')
-        train_data = np.load(os.path.join(args.data_path, 'train_data_' + file_id[i] + '.npy'))
-        train_label = np.load(os.path.join(args.data_path,
-                                           'train_label_' + file_id[i] + '.npy'))
-        test_data = np.load(os.path.join(args.data_path, 'test_data_' + file_id[i] + '.npy'))
-
-        b, a = signal.butter(8, [8 / 125, 30 / 125], 'bandpass')
-        train_data = signal.filtfilt(b, a, train_data)
-        test_data = signal.filtfilt(b, a, test_data)
-
-        if train_data_total is None:
-            train_data_total = train_data
-            train_label_total = train_label
-            test_data_total = test_data
-        else:
-            train_data_total = np.concatenate((train_data_total, train_data), axis=0)
-            train_label_total = np.concatenate((train_label_total, train_label), axis=0)
-            test_data_total = np.concatenate((test_data_total, test_data), axis=0)
-
-    clf.fit(train_data_total, train_label_total)
-
-    predict_label.extend(clf.predict(test_data_total))
-
-    print(train_data_total.shape, train_label_total.shape, test_data_total.shape)
-
-    # reports.append(
-    #     classification_report(train_data_total,
-    #                           clf.predict(train_label_total),
-    #                           target_names=['0', '1']))
+        reports.append(
+            classification_report(train_label,
+                                  grid.predict(train_data),
+                                  target_names=['0', '1']))
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
