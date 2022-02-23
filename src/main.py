@@ -21,6 +21,7 @@ from sklearn.svm import SVC, SVR
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
+from sklearn.model_selection import train_test_split
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -48,29 +49,28 @@ def train_eeg(args):
                                            'train_label_' + file_id[i] + '.npy'))
         test_data = np.load(os.path.join(args.data_path, 'test_data_' + file_id[i] + '.npy'))
 
-        b, a = signal.butter(8, [0.5 * 2 / 250, 80 * 2 / 250], 'bandpass')
+        b, a = signal.butter(8, [8 * 2 / 250, 30 * 2 / 250], 'bandpass')
         train_data = signal.filtfilt(b, a, train_data)
         test_data = signal.filtfilt(b, a, test_data)
 
-        csp = CSP(n_components=20, reg=None, log=False, norm_trace=False)
-        svc = SVC(kernel='linear', probability=True, class_weight='balanced', C=1)
-        pipe = Pipeline([('CSP', csp), ('SVC', svc)])
-        param_grid = {
-            'CSP__n_components': [20],
-            'SVC__C': [1],
-            'SVC__kernel': ['linear', 'rbf'],
-        }
-        grid = GridSearchCV(pipe, param_grid, cv=5, n_jobs=1, verbose=1)
-        grid.fit(train_data, train_label)
-        print('Best score: {}'.format(grid.best_score_))
-        print('Best parameters: {}'.format(grid.best_params_))
+        train_X, train_y = train_data, train_label
+        val_X, val_y = train_X, train_y
 
-        predict_label.extend(grid.predict(test_data))
+        train_X = (train_data - np.mean(train_data, axis=0)) / np.max(train_data)
+        val_X = train_X
+        test_X = (test_data - np.mean(test_data, axis=0)) / np.max(train_data)
 
-        reports.append(
-            classification_report(train_label,
-                                  grid.predict(train_data),
-                                  target_names=['0', '1']))
+        csp = CSP(n_components=128, reg=None, log=False, norm_trace=False)
+        svc = SVC(kernel='rbf', probability=True, class_weight='balanced', C=1)
+        clf = Pipeline([('CSP', csp), ('SVC', svc)])
+        clf.fit(train_X, train_y)
+
+        # val
+        val_pred = clf.predict(val_X)
+        val_report = classification_report(val_y, val_pred)
+        reports.append(val_report)
+
+        predict_label.extend(clf.predict(test_X))
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
