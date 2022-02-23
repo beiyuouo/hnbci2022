@@ -61,8 +61,8 @@ def train_eeg(args):
         test_X = (test_data - np.mean(test_data, axis=0)) / np.max(train_data)
 
         csp = CSP(n_components=128, reg=None, log=False, norm_trace=False)
-        svc = SVC(kernel='rbf', probability=True, class_weight='balanced', C=1)
-        clf = Pipeline([('CSP', csp), ('SVC', svc)])
+        rfc = RandomForestClassifier(n_estimators=512, max_depth=15, n_jobs=-1)
+        clf = Pipeline([('CSP', csp), ('RFC', rfc)])
         clf.fit(train_X, train_y)
 
         # val
