@@ -66,18 +66,24 @@ def train_test(train_data, train_label, test_data):
     train_data = signal.filtfilt(b, a, train_data)
     test_data = signal.filtfilt(b, a, test_data)
 
-    train_X, train_y = train_data, train_label
-    val_X, val_y = train_X, train_y
+    train_X = train_data
+    train_y = train_label
+    test_X = test_data
 
-    train_X = (train_data - np.mean(train_data, axis=0)) / np.max(train_data)
-    test_X = (test_data - np.mean(test_data, axis=0)) / np.max(train_data)
+    # train_X = (train_data - np.mean(train_data, axis=0)) / np.max(train_data)
+    # test_X = (test_data - np.mean(test_data, axis=0)) / np.max(train_data)
 
-    csp = CSP(n_components=256, reg=None, log=True, norm_trace=False)
-    rfc = RandomForestClassifier(n_estimators=512, max_depth=16, max_features=128, n_jobs=-1)
+    # train_X = (train_data - np.mean(train_data, axis=0)) / np.std(train_data)
+    # test_X = (test_data - np.mean(test_data, axis=0)) / np.std(train_data)
+
+    csp = CSP(n_components=64, reg=None, log=False, norm_trace=False)
+    rfc = RandomForestClassifier(n_estimators=512, max_depth=16, n_jobs=-1)
+    # svc = SVC(C=1, kernel='rbf', probability=True)
     clf = Pipeline([('CSP', csp), ('RFC', rfc)])
+    # clf = Pipeline([('CSP', csp), ('SVC', svc)])
     clf.fit(train_X, train_y)
-    val_pred = clf.predict(val_X)
-    report = classification_report(val_y, val_pred)
+    train_pred = clf.predict(train_X)
+    report = classification_report(train_y, train_pred)
 
     test_y = clf.predict(test_X)
 
