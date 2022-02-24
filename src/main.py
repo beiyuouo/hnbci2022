@@ -15,11 +15,18 @@ import numpy as np
 from scipy import signal
 import pandas as pd
 from mne.decoding import CSP
-from sklearn.pipeline import Pipeline
+from pyriemann.estimation import XdawnCovariances
+from pyriemann.classification import MDM
+from pyriemann.estimation import Covariances
+from pyriemann.tangentspace import TangentSpace
+import mne
+from mne import io
+from mne.datasets import sample
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.cluster import KMeans
 from sklearn.svm import SVC, SVR
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, cross_val_score
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
@@ -54,23 +61,26 @@ def train_eeg(args):
         test_data = signal.filtfilt(b, a, test_data)
 
         train_X, train_y = train_data, train_label
-        val_X, val_y = train_X, train_y
+        test_X = test_data
 
-        train_X = (train_data - np.mean(train_data, axis=0)) / np.max(train_data)
-        val_X = train_X
-        test_X = (test_data - np.mean(test_data, axis=0)) / np.max(train_data)
+        cov = Covariances()
+        train_X = cov.fit_transform(train_X)
+        mdm = MDM(metric='riemann', n_jobs=4)
 
-        csp = CSP(n_components=128, reg=None, log=False, norm_trace=False)
-        rfc = RandomForestClassifier(n_estimators=512, max_depth=15, n_jobs=-1)
-        clf = Pipeline([('CSP', csp), ('RFC', rfc)])
-        clf.fit(train_X, train_y)
+        accuracy = cross_val_score(mdm, train_X, train_y)
+
+        print(accuracy.mean())
+
+        print('train_X shape:', train_X.shape)
+        print('train_y shape:', train_y.shape)
 
         # val
-        val_pred = clf.predict(val_X)
-        val_report = classification_report(val_y, val_pred)
+        train_pred = mdm.predict(train_X)
+        val_report = classification_report(train_y, train_pred)
         reports.append(val_report)
 
-        predict_label.extend(clf.predict(test_X))
+        test_X = cov.transform(test_X)
+        predict_label.extend(mdm.predict(test_X))
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
