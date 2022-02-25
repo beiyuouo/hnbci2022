@@ -18,7 +18,8 @@ from mne.decoding import CSP
 from sklearn.pipeline import Pipeline
 from sklearn.cluster import KMeans
 from sklearn.svm import SVC, SVR
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier, GradientBoostingClassifier, VotingClassifier, BaggingClassifier, RandomTreesEmbedding, IsolationForest, VotingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, BaggingRegressor, AdaBoostRegressor, ExtraTreesRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
@@ -76,16 +77,68 @@ def train_test(train_data, train_label, test_data):
     # train_X = (train_data - np.mean(train_data, axis=0)) / np.std(train_data)
     # test_X = (test_data - np.mean(test_data, axis=0)) / np.std(train_data)
 
-    csp = CSP(n_components=64, reg=None, log=False, norm_trace=False)
-    rfc = RandomForestClassifier(n_estimators=512, max_depth=16, n_jobs=-1)
+    csp = CSP(n_components=30, reg=None, log=False, norm_trace=False)
+    rfc = RandomForestClassifier(n_estimators=100, n_jobs=-1)
+    efc = ExtraTreesClassifier(n_estimators=100, n_jobs=-1)
+    abc = AdaBoostClassifier(n_estimators=100)
+    gbc = GradientBoostingClassifier(n_estimators=100)
+    bgc = BaggingClassifier(n_estimators=100)
+
+    vc = VotingClassifier(estimators=[('rfc', rfc), ('efc', efc), ('abc', abc), ('gbc', gbc),
+                                      ('bgc', bgc)],
+                          voting='hard')
+
+    rte = RandomTreesEmbedding(n_estimators=100)
+    ifr = IsolationForest(n_estimators=100)
+
+    # regression
+    rfr = RandomForestRegressor(n_estimators=100, n_jobs=-1)
+    gbr = GradientBoostingRegressor(n_estimators=100)
+    abr = AdaBoostRegressor(n_estimators=100)
+    er = ExtraTreesRegressor(n_estimators=100, n_jobs=-1)
+    br = BaggingRegressor(n_estimators=100)
+    vr = VotingRegressor(estimators=[('rfr', rfr), ('gbr', gbr), ('abr',
+                                                                  abr), ('er', er), ('br', br)])
+
+    # classifier
+    # lr = LogisticRegression(solver='lbfgs', multi_class='multinomial', max_iter=1000)
+    # sgd = SGDClassifier(loss='log', max_iter=1000)
+    # svc = SVC(kernel='rbf', probability=True)
+    # svr = SVR(kernel='rbf')
+    # omp = OrthogonalMatchingPursuit()
+    # rlr = RandomizedLogisticRegression()
+
     # svc = SVC(C=1, kernel='rbf', probability=True)
-    clf = Pipeline([('CSP', csp), ('RFC', rfc)])
+    # clf = Pipeline([('CSP', csp), ('RFC', rfc)])
+    # clf = Pipeline([('CSP', csp), ('EFC', efc)])
+    # clf = Pipeline([('CSP', csp), ('ABC', abc)])
+    # clf = Pipeline([('CSP', csp), ('GBC', gbc)])
+    # clf = Pipeline([('CSP', csp), ('VC', vc)])
+    # clf = Pipeline([('CSP', csp), ('BGC', bgc)])
+    # clf = Pipeline([('CSP', csp), ('RTE', rte)])
+    # clf = Pipeline([('CSP', csp), ('IFR', ifr)])
+    # clf = Pipeline([('CSP', csp), ('RFR', rfr)])
+    # clf = Pipeline([('CSP', csp), ('EFR', efr)])
+    # clf = Pipeline([('CSP', csp), ('ABR', abr)])
+    # clf = Pipeline([('CSP', csp), ('GBR', gbr)])
+    # clf = Pipeline([('CSP', csp), ('BGR', bgr)])
+    # clf = Pipeline([('CSP', csp), ('IFRR', ifrr)])
     # clf = Pipeline([('CSP', csp), ('SVC', svc)])
+    # clf = Pipeline([('CSP', csp), ('SVR', svr)])
+    # clf = Pipeline([('CSP', csp), ('OMP', omp)])
+    clf = Pipeline([('CSP', csp), ('VR', vr)])
+
     clf.fit(train_X, train_y)
     train_pred = clf.predict(train_X)
+    throld = 0.75
+    print(train_pred[:10])
+    train_pred[train_pred > throld] = '1'
+    train_pred[train_pred <= throld] = '0'
     report = classification_report(train_y, train_pred)
 
     test_y = clf.predict(test_X)
+    test_y[test_y > throld] = '1'
+    test_y[test_y <= throld] = '0'
 
     return test_y, report
 
@@ -108,6 +161,7 @@ def train_eeg(args):
     predict_label.extend(result)
 
     dataframe = pd.DataFrame({'TrialId': trial_id, 'Label': predict_label})
+    dataframe = dataframe.astype({'TrialId': 'int', 'Label': 'int'})
     dataframe.to_csv(os.path.join(args.result_path, "sample_submission.csv"),
                      index=False,
                      sep=',')
